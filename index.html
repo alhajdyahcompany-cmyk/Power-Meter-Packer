@@ -85,12 +85,16 @@ td input,td select{padding:5px 7px;font-size:13px}
       <label class="drop" id="dropM" tabindex="0"><b>Missing photos (ZIP) <span class="muted small">optional</span></b><span class="muted small">Only needed after a first run showed missing photos. Add the extra ZIP and press the button again: only the new photos are read, and the deck and Excel are rebuilt with everything.</span><span class="what" id="whatM">No file yet</span><input type="file" id="fileM" accept=".zip,.jpg,.jpeg,.png,.webp" multiple></label>
     </div>
     <div class="fields">
+      <label class="f">Anthropic API key<input type="password" id="key" placeholder="sk-ant-..." autocomplete="off"></label>
+      <label class="f">Model<input type="text" id="model" value="claude-sonnet-5-5"></label>
+    </div>
+    <div class="fields">
       <label class="f">Work order number<input type="text" id="wo" placeholder="2622000427"></label>
       <label class="f">Area code in the title<input type="text" id="area" placeholder="BAHR S018 (read from the labels)"></label>
     </div>
     <div class="row">
       <button id="go" disabled>Read photos</button>
-      <span class="muted small" id="goNote">Reading uses your Claude usage: one request for every few photos. The first request asks you to allow it.</span>
+      <span class="muted small" id="goNote">Reading is billed to your API key: one request for every few photos. The key stays in this browser tab and is sent only to api.anthropic.com.</span>
     </div>
     <div id="s1msg"></div>
   </section>
@@ -223,7 +227,7 @@ async function loadMissing(files){
   if(added){$('#go').textContent='Read new photos';note($('#s1msg'),'ok',`${added} new photos added. Press "Read new photos": the ones already read are kept.`)}
   else note($('#s1msg'),'warn','Every photo in that file was already in the main ZIP, so nothing was added.');
 }
-function ready(){$('#go').disabled=!(S.photos.length&&S.order.length&&S.sample&&S.limits?.images)}
+function ready(){$('#go').disabled=!(S.photos.length&&S.order.length&&S.sample&&S.limits?.images&&$('#key').value.trim())}
 function wire(dropEl,input,handler){
   input.addEventListener('change',async()=>{try{await handler(input.files)}catch(e){note($('#s1msg'),'bad','That file could not be read: '+(e.message||e))}ready()});
   ['dragover','dragenter'].forEach(ev=>dropEl.addEventListener(ev,e=>{e.preventDefault();dropEl.classList.add('over')}));
@@ -291,7 +295,8 @@ async function runBatches(){
       }catch(e){
         b.photos.forEach(p=>{if(p.status==='pending')p.status='failed'});b.state='failed';
         if(['not_granted','sampling_disabled','capability_disabled','not_declared','images_unavailable','session_expired'].includes(e.code))fatal='Claude could not be used for this page ('+e.code+'). Allow it when asked, or try again later.';
-        else if(e.code==='rate_limited')fatal='Claude usage limit reached. Wait a while, then use "Read failed photos again".';
+        else if(e.code==='bad_key')fatal='The API key was rejected: '+e.message;
+        else if(e.code==='rate_limited')fatal='Usage limit reached. Wait a while, then use "Read failed photos again".';
         else if(e.code==='cancelled'){}
         else console.warn(e);
       }
@@ -478,11 +483,24 @@ async function buildXlsx(btn){
 
 /* ---------- start ---------- */
 (async()=>{
-  S.sample=await window.claude?.use('sample').catch?.(()=>null)??null;
-  S.dl=await window.claude?.use('downloads').catch?.(()=>null)??null;
-  if(S.sample){S.limits=await S.sample.limits().catch(()=>null)}
-  if(!S.sample||!S.limits?.images)note($('#s1msg'),'warn','Reading photos needs Claude with image support, which is not available in this view. Open the page inside Claude to use it.');
-  if(!S.dl)$('#dlNote').textContent='Saving files is not available in this view.';
+  S.limits={images:{maxCount:4}};
+  const b64=b=>new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result).split(',')[1]);r.onerror=()=>rej(r.error);r.readAsDataURL(b)});
+  S.sample={json:async(prompt,{images,signal})=>{
+    const key=$('#key').value.trim();
+    if(!key){const e=new Error('Paste your API key first.');e.code='bad_key';throw e}
+    const content=[];
+    for(const im of images)content.push({type:'image',source:{type:'base64',media_type:'image/jpeg',data:await b64(im)}});
+    content.push({type:'text',text:prompt});
+    let r;
+    try{r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',signal,headers:{'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:$('#model').value.trim()||'claude-sonnet-5-5',max_tokens:1500,messages:[{role:'user',content}]})})}
+    catch(err){if(err.name==='AbortError'){const e=new Error('cancelled');e.code='cancelled';throw e}throw err}
+    if(!r.ok){let m='';try{m=(await r.json()).error?.message||''}catch(_){}const e=new Error(m||('HTTP '+r.status));e.code=r.status===401||r.status===403?'bad_key':r.status===429?'rate_limited':'http_'+r.status;throw e}
+    const j=await r.json();const t=(j.content||[]).map(c=>c.text||'').join('');
+    const a=t.indexOf('['),z=t.lastIndexOf(']');if(a<0||z<a)throw new Error('The reply had no JSON list');
+    return JSON.parse(t.slice(a,z+1));
+  }};
+  S.dl={save:async({filename,data})=>{const u=URL.createObjectURL(data instanceof Blob?data:new Blob([data]));const a=document.createElement('a');a.href=u;a.download=filename;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),30000);return {status:'saved'}}};
+  $('#key').addEventListener('input',ready);
   ready();
 })();
 </script>
