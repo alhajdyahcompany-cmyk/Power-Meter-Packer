@@ -1,0 +1,487 @@
+<title>Power Meter Packer</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one column workbench, four numbered steps (add files, read, review, download) that mirror the real order of work. */
+:root{
+  --bg:#f6f5f8; --panel:#ffffff; --fg:#1d1b22; --muted:#6b6676; --line:#dedae6;
+  --accent:#7030a0; --accent-fg:#ffffff; --accent-soft:#efe6f6;
+  --ok:#1f7a45; --ok-soft:#e3f3ea; --warn:#9a5b00; --warn-soft:#fbefd9; --bad:#b3261e; --bad-soft:#fbe4e2;
+  --font:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#16141a; --panel:#1f1c25; --fg:#ece9f1; --muted:#a39db0; --line:#383341; --accent:#b98ae0; --accent-fg:#16141a; --accent-soft:#2f2339;
+  --ok:#6fd49a; --ok-soft:#1c3328; --warn:#f0b960; --warn-soft:#3a2e17; --bad:#ff8f86; --bad-soft:#3d1f1d; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#16141a; --panel:#1f1c25; --fg:#ece9f1; --muted:#a39db0; --line:#383341; --accent:#b98ae0; --accent-fg:#16141a; --accent-soft:#2f2339;
+  --ok:#6fd49a; --ok-soft:#1c3328; --warn:#f0b960; --warn-soft:#3a2e17; --bad:#ff8f86; --bad-soft:#3d1f1d; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font:15px/1.5 var(--font);padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:24px 56px}
+.wrap{max-width:1040px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+header h1{font-size:26px;line-height:1.2;margin:0 0 6px;font-weight:600;text-wrap:balance}
+header p{margin:0;color:var(--muted);max-width:62ch}
+section.step{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:20px;display:flex;flex-direction:column;gap:16px;min-width:0}
+.step h2{margin:0;font-size:17px;font-weight:600;display:flex;gap:10px;align-items:baseline}
+.step h2 .n{font-family:var(--mono);font-size:13px;color:var(--accent);border:1px solid var(--accent);border-radius:4px;padding:0 6px}
+.muted{color:var(--muted)} .small{font-size:13px}
+.grid2 #dropM{grid-column:1/-1}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+@media(max-width:700px){.grid2{grid-template-columns:1fr}}
+.drop{border:1.5px dashed var(--line);border-radius:8px;padding:16px;display:flex;flex-direction:column;gap:6px;cursor:pointer;min-width:0;background:var(--bg)}
+.drop:hover,.drop.over{border-color:var(--accent);background:var(--accent-soft)}
+.drop b{font-weight:600} .drop .what{font-family:var(--mono);font-size:13px;color:var(--ok);word-break:break-all}
+.drop input{display:none}
+.fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+@media(max-width:700px){.fields{grid-template-columns:1fr}}
+label.f{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted)}
+input[type=text],input[type=number],select{font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:7px 9px;min-width:0;width:100%}
+input:focus-visible,select:focus-visible,button:focus-visible,.drop:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+button{font:inherit;font-weight:500;border-radius:6px;padding:9px 16px;border:1px solid var(--accent);background:var(--accent);color:var(--accent-fg);cursor:pointer}
+button.ghost{background:transparent;color:var(--accent)}
+button:disabled{opacity:.45;cursor:not-allowed}
+.bar{height:8px;border-radius:4px;background:var(--line);overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:var(--accent);transition:width .3s}
+.tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+@media(max-width:700px){.tiles{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.tile{border:1px solid var(--line);border-radius:8px;padding:12px;background:var(--bg)}
+.tile b{display:block;font-family:var(--mono);font-size:24px;font-weight:500;font-variant-numeric:tabular-nums}
+.tile span{font-size:13px;color:var(--muted)}
+.tile.bad b{color:var(--bad)} .tile.ok b{color:var(--ok)} .tile.warn b{color:var(--warn)}
+.tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:middle}
+th{font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);font-weight:500;background:var(--bg);white-space:nowrap}
+tr:last-child td{border-bottom:0}
+td.num,th.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
+.pill{display:inline-block;border-radius:999px;padding:1px 9px;font-size:12px;font-weight:500;white-space:nowrap}
+.pill.ok{background:var(--ok-soft);color:var(--ok)} .pill.warn{background:var(--warn-soft);color:var(--warn)} .pill.bad{background:var(--bad-soft);color:var(--bad)}
+td img{width:46px;height:61px;object-fit:cover;border-radius:4px;display:block;cursor:zoom-in;background:var(--line)}
+td input,td select{padding:5px 7px;font-size:13px}
+.tools{display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:space-between}
+.msg{border-radius:8px;padding:10px 12px;font-size:14px}
+.msg.bad{background:var(--bad-soft);color:var(--bad)} .msg.warn{background:var(--warn-soft);color:var(--warn)} .msg.ok{background:var(--ok-soft);color:var(--ok)}
+#lightbox{position:fixed;inset:0;background:rgba(0,0,0,.82);display:flex;align-items:center;justify-content:center;z-index:20;padding:16px}
+#lightbox img{max-width:100%;max-height:100%;border-radius:6px}
+@media(prefers-reduced-motion:reduce){.bar i{transition:none}}
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pptxgenjs/3.12.0/pptxgen.bundle.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<div class="wrap">
+  <header>
+    <h1>Power Meter Packer</h1>
+    <p>Add your Granite file and the field photos. Claude reads each box label and power meter screen, pairs the 1310 and 1550 photos for every port, and builds the PowerPoint and an Excel table of readings.</p>
+  </header>
+
+  <section class="step" id="s1">
+    <h2><span class="n">1</span>Add files</h2>
+    <div class="grid2">
+      <label class="drop" id="dropX" tabindex="0"><b>Granite file (Excel)</b><span class="muted small">The Granite table (Distribution sheet). It gives the boxes, the number of ports for each, and the splitter and port numbers used to double-check every label.</span><span class="what" id="whatX">No file yet</span><input type="file" id="fileX" accept=".xlsx,.xls,.csv"></label>
+      <label class="drop" id="dropP" tabindex="0"><b>Photos (ZIP)</b><span class="muted small">One or more ZIP files with the original photos. RAR is not supported: re-save it as ZIP first.</span><span class="what" id="whatP">No file yet</span><input type="file" id="fileP" accept=".zip,.jpg,.jpeg,.png,.webp" multiple></label>
+      <label class="drop" id="dropM" tabindex="0"><b>Missing photos (ZIP) <span class="muted small">optional</span></b><span class="muted small">Only needed after a first run showed missing photos. Add the extra ZIP and press the button again: only the new photos are read, and the deck and Excel are rebuilt with everything.</span><span class="what" id="whatM">No file yet</span><input type="file" id="fileM" accept=".zip,.jpg,.jpeg,.png,.webp" multiple></label>
+    </div>
+    <div class="fields">
+      <label class="f">Work order number<input type="text" id="wo" placeholder="2622000427"></label>
+      <label class="f">Area code in the title<input type="text" id="area" placeholder="BAHR S018 (read from the labels)"></label>
+    </div>
+    <div class="row">
+      <button id="go" disabled>Read photos</button>
+      <span class="muted small" id="goNote">Reading uses your Claude usage: one request for every few photos. The first request asks you to allow it.</span>
+    </div>
+    <div id="s1msg"></div>
+  </section>
+
+  <section class="step" id="s2" hidden>
+    <h2><span class="n">2</span>Reading photos</h2>
+    <div class="bar"><i id="bar"></i></div>
+    <div class="row"><span id="prog" class="small"></span><button class="ghost" id="stop">Stop</button><button class="ghost" id="retry" hidden>Read failed photos again</button></div>
+    <div id="s2msg"></div>
+  </section>
+
+  <section class="step" id="s3" hidden>
+    <h2><span class="n">3</span>Review</h2>
+    <div class="tiles" id="tiles"></div>
+    <div id="issues"></div>
+    <div class="tools"><b>Photos to check</b><label class="row small muted"><input type="checkbox" id="showAll"> Show all photos</label></div>
+    <div class="tablewrap"><table id="ptable"><thead><tr><th>Photo</th><th>File</th><th>Box</th><th>Wavelength</th><th class="num">dBm</th><th>Status</th></tr></thead><tbody></tbody></table></div>
+    <datalist id="boxlist"></datalist>
+  </section>
+
+  <section class="step" id="sM" hidden>
+    <h2><span class="n">4</span>Missing pictures</h2>
+    <p class="muted small" style="margin:0">Every port that still has no photo, or only one of the two wavelengths. Send these to the field team, or add them in the "Missing photos (ZIP)" box above and press "Read new photos".</p>
+    <div id="missing"></div>
+    <div class="row"><button id="copyMiss" class="ghost" hidden>Copy list</button><span class="small muted" id="copyNote"></span></div>
+  </section>
+
+  <section class="step" id="s4" hidden>
+    <h2><span class="n">5</span>Download</h2>
+    <p class="muted small" style="margin:0">Each slide holds one port: 1310 on the left, 1550 on the right. Boxes follow the order of your Excel list.</p>
+    <div class="row"><button id="dlP">Download PowerPoint</button><button id="dlX" class="ghost">Download Excel table</button><span class="small muted" id="dlNote"></span></div>
+  </section>
+</div>
+<div id="lightbox" hidden><img alt="Photo enlarged"></div>
+
+<script>
+const LOGO="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAHoAAAA0CAYAAABFCyz4AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAAEnQAABJ0Ad5mH3gAAAhvSURBVHhe7Zt7dFTVFYe/ZBIegQBJABMCGHm0qTwK8hIRDVICpQLyKAKtWmijWKqARZLwKqBgqwEJBIoU6gJdUkBRixhBBARCBeUREQRBE00TBBEJj0DIY/rHJk5mJ/NKZu7QzHxr3bUyv30CK/d355yz99k34MKFC2b81HgCEhMT/UbXcJKTkwkYwgvmt3oc0TE/NYikuCgCteinZuI32kfwG+0j+I32EWruZiyiIbyTqlULG7fDC2u0WiPxb8Z8CL/RPoLfaB/Bb7SP4DfaR7h5jG4SBk3DK14RDfXIm5uQOhX/hrIrNESPNgzvpldRjaFdK7inC/TpCkEmPQIKrkFGJry3F05+A9/9oEdUTsP6sGiKVi0cOgFb9mpVKCyC7Dyt2qZBPYhuCqMHwK1R8JOWeoSQcwY+z4KdB2D/Z3Dlqh7hEZLiorxo9OO/hvt7Q3gDHbHN2fOwcQes3qQjrvNAHCT+TqtCdh6MnqbVioTUgf49YWQ8xETpqH1O5cDa9+D9fVBUrKNuxTt5dLMmkJYID//KNZNBpr+EobA0CRo30lFjaXELzH4Mpj7iuskAbVrAzASZdVpF66jbMdboyAhIfRq6/ExHnMcUCHfEwsKnoFGojhpDbAy8PBt6d9YR17kjFtKSIKaZjrgV44wODIDhfaF5Ux2pGm1byjc7pI6OeJZ2reX/rVdXR6pOWKj8m62b64jbMM7oTj+F3w7UqgWzGb4+DV/lUrrviPycc0aPsqZVNMR10arnaBkJKZM883CFN5A9Q3CQjrgF44wedI9WLJzPh+Q0GJUMv5lO4KQF8vOoJJj7D7h4Rf+GhXFDtOIZateC3z/g/HJxPBsyv7BcBdf0iIp0aAMP369Vt2CM0aEhcGcHrVqYsQw+PKBVKDVDegZMX2rb7OimsjHyND3aQ/ydWrWm8Dq8sR3+8Aw8Ng/Gz7dcCc/IaVmpgxa9EX09km8bk16FhcK7S7QqfHIMJi2AkhIdsWbcYEgYZq3lnIEDx2DHJ7D/qHUsLBRemmGtlWdvJmzYplWhuBjOnLd8Dg6SNbRDm/KjrCk1w7S0yh/Y8sREwXNP2t+pL3/DPSnkDbyTXmkKixybDLDjAORfhq0fweK10H8CPDQD/ra6oskAgYHyTbd1BQdB7tnKr/Imc2NtdmTyjKWOTQbIPi0PhNnGN7vUDF2rkZXYwPtG9/o5DOyl1Ypk5cKAP8FflsPaLTKVFxbpUZ4hvqdWrFn5pswqzpKVC+vft3wuNUvFb91WmLwAnni+/Gi3YIzRJaW211iAaePgwXi4LVry5JuNuztpxcKlAinPukp6hlT6Nu2C6WkweDIsek1Kox7AmLt68YqsibYwmWDSGFg9BxZPhdQpMORe6Ha71MO9za121tPDJ+D0Oa065sTXsmmb/0+pfXsYY4wGeHePVioSHCSVou7tIWmsmL5iBqyeK2lHbIz+Dc/TMlKKPbZIr8K3uQxnD2jcgHFGHzwua5CrNG4kp0GPj4BlyTBvgsfLhVb07AgBdozOv6SVmxLjjC4plTVowzbbO05H1K0N93WDV5+V0y97Bvixwjijy1j4qhw1Xi7QEecxBcrpV8JQ+9Oqnx8x3miAlDVSLXpnt+SVVWXsYBgSp1X3cu6CVv4v8Y7RAF/+F+atgkdvlAuXrIPdh1y/sWMHa8W9fLBflh1bePDEyZ14z+gyLhXApyfhtXSYmgpjZ8PIRPmcnqFHV6RJmHSqeAt7NXxH9O4shyUG4H2jNecuSA17yTo5uRr+tOOCRMP6WnEvB45pxUL39pKCuUpAgJy8bVoEc8ZDx7Ye3Vwaa3RwkJy79u4MT4yyXz8uI+87mLMCDn6uIxZG9tOKe8n8QisWgkzw7B+hVrCO2OehgVIXCA2RU7GXpsPGFLkvzZro0dXGGKPbtYJZN/qjNi+G5yfCmAEwcYweaZvXt2vFQmXdo+5k/TZZYmzRtiUM7aNV27SKlm4bTWSE3JdVs3Sk2hhj9MpZ8MteUvUqT0wU3NXRWrNFVIRWLOz9VCuO6dXJ+W6OywWwodwhRGVMHA3jhztuTOjeDl78szQ62mLV21qpNsYYbWuNrVdX1qfu7XTEmob1Yeh9WrWQlasVuF4khwa2uCUcnhwljQvlad0cRvxC1szyvLUTvs+31soTEACPDIKVM2F0f+uKWlgo9O0uDY0vTrFv8ulzzm1CXcSYxoM+3WD+BK1auFoIew5LXl3+9MZkksLIiL4QbueNjUGTKk/L5o6Hfg66Qi5esW7zCQ2RB/CphfAfNVMkDJMGCGcoKYFz+VIFrBXsfGtz6lr41xatVgvjGg/2HIKP7exc69aGfj3kid+5wnJ9sBweHWbf5MMnKjcZIPOkVirSoJ6sjWWXve7OlW86X8I1mWTWiIxw3uSPjrjd5DKMMbqoWDowjn6pI9aYAiWv/PFysJO9WigpmC0OHpc+LndhNltKuO4m+zQ897JW3YYxRnNjipyaCke/0pGqUXANZi6zfxaclQt/f12r1SdlDby9U6tV51QOTE6xv6eoJsYZDXD+IkxdBLsO6ohrnMqR3DrDTjNDGekZ9nPwqpLyinSn5l/WEdd4ZTNM+Ct8+72OuBVTLPGzRzU/q3XPcbVQ6sc/XIQ6tSDKheJAdh4sXQ9p68RsZygsgl2HIO8s3O3kKzS7D8laWWynabHUDFl5sG0flJZCi0ioU1uPss3Hx6S7ZPNuuObG5aUStsWEGrTrtkWQSYoNfbrKzvTBeD0C9n0mr8tmZMLxrOrdlKbhMOAuuP02uFe94fHNtzLTHD4hJlx3sfGwfoj0fsfGyN/Uo711vLgE/v2hzADrtsors/YeJDfi3ddm/RiGcemVH6/jN9pH8BvtI/iN9hH8RvsI/wPbboIRcqrIGwAAAABJRU5ErkJggg==";
+const $=s=>document.querySelector(s);
+const S={boxes:new Map(),order:[],photos:[],hashes:new Set(),extraMode:false,batches:[],sample:null,dl:null,limits:null,running:false,ctl:null,excelName:'',analysis:null};
+
+/* ---------- helpers ---------- */
+const key=(t,n)=>`${t.toUpperCase()}-${String(n).padStart(3,'0')}`;
+function parseBox(s){const m=/(ODB|TB)\s*[-–_ ]?\s*(\d{1,4})/i.exec(String(s||''));return m?key(m[1],parseInt(m[2],10)):null}
+const labelOf=(k,p)=>{const [t,n]=k.split('-');const num=parseInt(n,10);return t==='TB'?`TB – ${num} P${p}`:`ODB-${num} P${p}`};
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function note(el,kind,text){el.innerHTML=text?`<div class="msg ${kind}">${esc(text)}</div>`:''}
+async function sha1(buf){const h=await crypto.subtle.digest('SHA-1',buf);return [...new Uint8Array(h)].map(b=>b.toString(16).padStart(2,'0')).join('')}
+
+/* ---------- inputs ---------- */
+async function loadExcel(file){
+  const buf=await file.arrayBuffer();
+  const wb=XLSX.read(buf,{type:'array'});
+  S.boxes=new Map();S.order=[];let area='',wo='',fmt='simple list';
+  const mode=a=>{const c={};a.forEach(v=>c[v]=(c[v]||0)+1);return +Object.entries(c).sort((x,y)=>y[1]-x[1])[0]?.[0]};
+  for(const name of wb.SheetNames){
+    const rows=XLSX.utils.sheet_to_json(wb.Sheets[name],{header:1,defval:''});
+    const hi=rows.findIndex(r=>r.some(c=>String(c).trim()==='TB No.'));
+    if(hi<0)continue;
+    const H=rows[hi].map(c=>String(c).trim()),col=(n,from=0)=>H.indexOf(n,from);
+    const iTB=col('TB No.'),iType=col('TB Type'),iSpl=col('Splitter No.'),iPort=col('Port No.'),iClli=col('CLLI Code',iTB),iSba=col('SBA No.'),iWo=col('STC Work Order'),iHH=col('Handhole No.'),iFat=col('FDT/FAT No.');
+    for(const r of rows.slice(hi+1)){
+      const n=parseInt(r[iTB],10),t=String(r[iType]).trim().toUpperCase();
+      if(!Number.isFinite(n)||!/^(TB|ODB)$/.test(t))continue;
+      const k=key(t,n);
+      if(!S.boxes.has(k)){S.boxes.set(k,{units:0,spl:[],ports:[],clli:String(r[iClli]||'').trim(),hh:r[iHH],fat:r[iFat]});S.order.push(k)}
+      const b=S.boxes.get(k);b.units++;
+      const sp=parseInt(r[iSpl],10),pp=parseInt(r[iPort],10);
+      if(Number.isFinite(sp))b.spl.push(sp);if(Number.isFinite(pp))b.ports.push(pp);
+      if(!area&&r[iSba])area=String(r[iSba]).trim();
+      if(!wo&&Number(r[iWo]))wo=String(Math.round(Number(r[iWo])));
+    }
+    if(S.order.length){fmt='Granite';break}
+  }
+  if(fmt==='Granite'){
+    for(const b of S.boxes.values())b.sp=b.ports.length&&b.spl.length?{spl:mode(b.spl),lo:Math.min(...b.ports),hi:Math.max(...b.ports)}:null;
+  }else{
+    const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1});
+    for(const r of rows){const k=parseBox(r[0]);if(!k||!/^\s*(ODB|TB)/i.test(String(r[0])))continue;
+      if(!S.boxes.has(k)){S.boxes.set(k,{units:Math.max(1,parseInt(r[1],10)||1),sp:null});S.order.push(k)}}
+  }
+  if(!S.order.length)throw new Error('No TB or ODB boxes found in this file.');
+  S.excelName=file.name;
+  const m=/(\d{8,})/.exec(file.name);
+  if(!$('#wo').value)$('#wo').value=wo||(m?m[1]:'');
+  if(area&&!$('#area').value)$('#area').value=area;
+  $('#whatX').textContent=`${file.name} · ${fmt} format, ${S.order.length} boxes, ${[...S.boxes.values()].reduce((a,b)=>a+b.units,0)} units`;
+  $('#boxlist').innerHTML=S.order.map(k=>`<option value="${k}">`).join('');
+}
+async function collect(files){
+  const list=[...files];const rar=list.filter(f=>/\.rar$/i.test(f.name));
+  if(rar.length)throw new Error('RAR files cannot be opened here. Save the photos as a ZIP file and add that instead.');
+  const found=[];
+  for(const f of list){
+    if(/\.zip$/i.test(f.name)){
+      const z=await JSZip.loadAsync(f);
+      for(const e of Object.values(z.files)){
+        if(e.dir||/__MACOSX|\/\./.test(e.name)||!/\.(jpe?g|png|webp)$/i.test(e.name))continue;
+        found.push({name:e.name.split('/').pop(),blob:await e.async('blob')});
+      }
+    }else if(/\.(jpe?g|png|webp)$/i.test(f.name))found.push({name:f.name,blob:f});
+  }
+  found.sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true}));
+  return found;
+}
+async function addPhotos(found){
+  let dup=0,added=0;
+  for(const p of found){
+    const h=await sha1(await p.blob.arrayBuffer());
+    if(S.hashes.has(h)){dup++;continue}S.hashes.add(h);
+    S.photos.push({id:S.photos.length,name:p.name,blob:new Blob([p.blob],{type:p.blob.type||'image/jpeg'}),box:null,wl:null,dbm:null,area:null,status:'pending',thumb:null,edited:false,extra:S.extraMode});
+    added++;
+  }
+  return {dup,added};
+}
+async function loadPhotos(files){
+  const found=await collect(files);
+  S.photos=[];S.hashes=new Set();S.extraMode=false;
+  const {dup}=await addPhotos(found);S.dupes=dup;
+  $('#whatP').textContent=`${S.photos.length} photos${dup?` (${dup} duplicates skipped)`:''}`;
+  $('#whatM').textContent='No file yet';$('#go').textContent='Read photos';
+}
+async function loadMissing(files){
+  if(!S.photos.length)throw new Error('Add the main photos ZIP first, then the missing photos.');
+  const found=await collect(files);
+  S.extraMode=true;
+  const {dup,added}=await addPhotos(found);
+  S.extraAdded=(S.extraAdded||0)+added;
+  $('#whatM').textContent=`${added} new photos added${dup?` (${dup} already in the main ZIP, skipped)`:''}`;
+  $('#whatP').textContent=`${S.photos.length} photos in total`;
+  if(added){$('#go').textContent='Read new photos';note($('#s1msg'),'ok',`${added} new photos added. Press "Read new photos": the ones already read are kept.`)}
+  else note($('#s1msg'),'warn','Every photo in that file was already in the main ZIP, so nothing was added.');
+}
+function ready(){$('#go').disabled=!(S.photos.length&&S.order.length&&S.sample&&S.limits?.images)}
+function wire(dropEl,input,handler){
+  input.addEventListener('change',async()=>{try{await handler(input.files)}catch(e){note($('#s1msg'),'bad','That file could not be read: '+(e.message||e))}ready()});
+  ['dragover','dragenter'].forEach(ev=>dropEl.addEventListener(ev,e=>{e.preventDefault();dropEl.classList.add('over')}));
+  ['dragleave','drop'].forEach(ev=>dropEl.addEventListener(ev,e=>{e.preventDefault();dropEl.classList.remove('over')}));
+  dropEl.addEventListener('drop',async e=>{try{await handler(e.dataTransfer.files)}catch(err){note($('#s1msg'),'bad','That file could not be read: '+(err.message||err))}ready()});
+  dropEl.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();input.click()}});
+}
+wire($('#dropX'),$('#fileX'),fs=>loadExcel(fs[0]));
+wire($('#dropP'),$('#fileP'),loadPhotos);
+wire($('#dropM'),$('#fileM'),loadMissing);
+
+/* ---------- reading with Claude ---------- */
+async function prep(p){
+  if(p.sendBlob)return p.sendBlob;
+  const bmp=await createImageBitmap(p.blob,{imageOrientation:'from-image'});
+  const draw=(max,q)=>new Promise(res=>{const s=Math.min(1,max/Math.max(bmp.width,bmp.height));const c=document.createElement('canvas');c.width=Math.round(bmp.width*s);c.height=Math.round(bmp.height*s);c.getContext('2d').drawImage(bmp,0,0,c.width,c.height);c.toBlob(res,'image/jpeg',q)});
+  p.sendBlob=await draw(1200,.85);const t=await draw(160,.7);p.thumb=URL.createObjectURL(t);bmp.close?.();return p.sendBlob;
+}
+function promptFor(n){
+  return `These ${n} images are field photos from an STC fibre-to-the-home network test. Each shows a closed or open fibre box with a white label sticker, and an AFL/Noyes OPM5 optical power meter held in front of it.
+For each image, in the order given (image 1 first), read:
+- box: the box ID printed on the white label sticker, for example TB-008 or ODB-007. Write it as TB-<number> or ODB-<number>.
+- area: the area text on the sticker, for example "BAHR S018".
+- sp: the splitter and port line on the sticker (third line), copied exactly as printed, for example "SP008/PORT 020" or "SP005/PORT 17-22".
+- wl: the wavelength on the meter screen, either 1310 or 1550 (a number).
+- dbm: the power value on the meter screen, a negative number with two decimals (for example -16.03).
+- status: "ok" if box, wl and dbm are all clearly readable, otherwise "unclear".
+Never guess. Use null for any value you cannot read with confidence.
+Valid box IDs come from this list: ${S.order.map(k=>k.replace(/-0*(\d)/,'-$1')).join(', ')}. If the sticker shows a box outside the list, still report what it says.
+Reply with only a JSON array with one object per image, in order: [{"image":1,"box":"ODB-7","area":"BAHR S018","sp":"SP03/PORT 01-07","wl":1550,"dbm":-16.03,"status":"ok"}]`;
+}
+function parseSp(x){const m=/SP\s*0*(\d+)\s*\/?\s*PORT\s*0*(\d+)(?:\s*[-–]\s*0*(\d+))?/i.exec(String(x||''));return m?{spl:+m[1],lo:+m[2],hi:m[3]?+m[3]:+m[2]}:null}
+const sameSp=(a,b)=>a&&b&&a.spl===b.spl&&a.lo===b.lo&&a.hi===b.hi;
+function boxFromSp(sp){if(!sp)return null;const c=S.order.filter(k=>sameSp(S.boxes.get(k).sp,sp));return c.length===1?c[0]:null}
+function applyResult(p,r){
+  p.box=parseBox(r?.box);p.area=r?.area?String(r.area).trim():null;p.spRaw=r?.sp?String(r.sp).trim():'';p.sp=parseSp(r?.sp);
+  p.wl=[1310,1550].includes(Number(r?.wl))?Number(r.wl):null;
+  const d=Number(r?.dbm);p.dbm=Number.isFinite(d)?d:null;
+  p.inferred=false;p.spBox=null;p.spMismatch=false;
+  const fromSp=boxFromSp(p.sp);
+  if(!p.box&&fromSp){p.box=fromSp;p.inferred=true}
+  const exp=S.boxes.get(p.box)?.sp;
+  if(p.sp&&exp&&!sameSp(p.sp,exp)){p.spMismatch=true;p.spBox=fromSp}
+  p.status=(r?.status==='ok'&&p.box&&p.wl&&p.dbm!==null&&p.dbm<0&&p.dbm>-40&&!p.spMismatch)?'ok':'unclear';
+}
+function makeBatches(){
+  const size=Math.max(1,Math.min(4,S.limits.images.maxCount));
+  const todo=S.photos.filter(p=>p.status==='pending'||p.status==='failed');
+  S.batches=[];for(let i=0;i<todo.length;i+=size)S.batches.push({photos:todo.slice(i,i+size),state:'queued'});
+}
+let startedAt=0;
+async function runBatches(){
+  S.running=true;S.ctl=new AbortController();startedAt=Date.now();
+  $('#s2').hidden=false;$('#stop').hidden=false;$('#retry').hidden=true;$('#go').disabled=true;note($('#s2msg'),'','');
+  let next=0,fatal=null;
+  const worker=async()=>{
+    while(!S.ctl.signal.aborted&&!fatal){
+      const b=S.batches[next++];if(!b)return;
+      try{
+        const blobs=await Promise.all(b.photos.map(prep));
+        const out=await S.sample.json(promptFor(b.photos.length),{images:blobs,modelTier:'default',signal:S.ctl.signal});
+        const arr=Array.isArray(out)?out:(out&&Array.isArray(out.results)?out.results:[]);
+        b.photos.forEach((p,i)=>{const r=arr.find(x=>Number(x.image)===i+1)||arr[i];if(r)applyResult(p,r);else p.status='failed'});
+        b.state='done';
+      }catch(e){
+        b.photos.forEach(p=>{if(p.status==='pending')p.status='failed'});b.state='failed';
+        if(['not_granted','sampling_disabled','capability_disabled','not_declared','images_unavailable','session_expired'].includes(e.code))fatal='Claude could not be used for this page ('+e.code+'). Allow it when asked, or try again later.';
+        else if(e.code==='rate_limited')fatal='Claude usage limit reached. Wait a while, then use "Read failed photos again".';
+        else if(e.code==='cancelled'){}
+        else console.warn(e);
+      }
+      progress();
+    }
+  };
+  await Promise.all([worker(),worker()]);
+  S.running=false;$('#stop').hidden=true;
+  if(fatal)note($('#s2msg'),'bad',fatal);
+  const failed=S.photos.filter(p=>p.status==='failed'||p.status==='pending').length;
+  $('#retry').hidden=!failed;$('#go').disabled=false;
+  progress(true);render();
+}
+function progress(final){
+  const total=S.photos.length,done=S.photos.filter(p=>p.status==='ok'||p.status==='unclear').length;
+  $('#bar').style.width=(100*done/total)+'%';
+  const el=(Date.now()-startedAt)/1000;
+  $('#prog').textContent=`${done} of ${total} photos read`+(final?'':` · ${Math.floor(el/60)}m ${Math.round(el%60)}s elapsed`);
+  if(done&&!$('#area').value){const c={};S.photos.forEach(p=>p.area&&(c[p.area]=(c[p.area]||0)+1));const top=Object.entries(c).sort((a,b)=>b[1]-a[1])[0];if(top)$('#area').placeholder=top[0]}
+}
+$('#go').onclick=()=>{S.photos.forEach(p=>{if(p.status!=='ok'&&p.status!=='unclear')p.status='pending'});makeBatches();runBatches()};
+$('#retry').onclick=()=>{makeBatches();runBatches()};
+$('#stop').onclick=()=>S.ctl?.abort();
+
+/* ---------- pairing and checks ---------- */
+function pairItems(items){
+  items=[...items].sort((a,b)=>a.id-b.id);const pairs=[],left=[];let i=0;
+  while(i<items.length){
+    if(i+1<items.length&&items[i+1].wl!==items[i].wl){const [a,b]=items[i].wl===1310?[items[i],items[i+1]]:[items[i+1],items[i]];pairs.push([a,b]);i+=2}
+    else{left.push(items[i]);i++}
+  }
+  const l31=left.filter(x=>x.wl===1310),l55=left.filter(x=>x.wl===1550),k=Math.min(l31.length,l55.length);
+  for(let j=0;j<k;j++)pairs.push([l31[j],l55[j]]);
+  pairs.sort((a,b)=>Math.min(a[0].id,a[1].id)-Math.min(b[0].id,b[1].id));
+  return {pairs,rest:[...l31.slice(k),...l55.slice(k)]};
+}
+function analyze(){
+  const by=new Map();
+  S.photos.forEach(p=>{if((p.status==='ok'||p.status==='unclear'||p.edited)&&p.box&&p.wl){(by.get(p.box)||by.set(p.box,[]).get(p.box)).push(p)}});
+  const keys=[...S.order,...[...by.keys()].filter(k=>!S.boxes.has(k)).sort()];
+  const slides=[],boxes=[],issues=[],missing=[];
+  for(const k of keys){
+    const exp=S.boxes.get(k)?.units??null,items=by.get(k)||[];
+    if(!items.length){if(exp)for(let n=1;n<=exp;n++)missing.push({k,port:n,label:labelOf(k,n),need:'1310 and 1550',have:''});boxes.push({k,exp,found:0,note:'No photos found'});issues.push({k,kind:'bad',text:`No photos found (${exp} port${exp>1?'s':''} expected)`});continue}
+    const {pairs,rest}=pairItems(items);const notes=[];
+    if(exp===null)notes.push('Box is not in the Excel list');
+    else{if(pairs.length<exp)notes.push(`${exp-pairs.length} port(s) missing photos`);if(pairs.length>exp)notes.push(`${pairs.length-exp} extra pair(s), possibly retakes`)}
+    rest.forEach(r=>notes.push(`unpaired ${r.wl} photo ${r.name}`));
+    if(exp!==null)for(let n=pairs.length+1,r=0;n<=exp;n++,r++){const x=rest[r];missing.push({k,port:n,label:labelOf(k,n),need:x?(x.wl===1310?'1550':'1310'):'1310 and 1550',have:x?`${x.wl} (${x.name})`:''})}
+    pairs.forEach(([a,b],i)=>slides.push({k,port:i+1,label:labelOf(k,i+1),a,b}));
+    if(exp!==null)rest.forEach(r=>{if(pairs.length<exp){slides.push({k,port:pairs.length+1,label:labelOf(k,pairs.length+1),a:r.wl===1310?r:null,b:r.wl===1550?r:null})}});
+    boxes.push({k,exp,found:pairs.length,note:notes.join('; ')});
+    if(notes.length)issues.push({k,kind:exp!==null&&pairs.length>=exp&&!rest.length?'warn':'bad',text:notes.join('; ')});
+  }
+  return {slides,boxes,issues,missing};
+}
+
+/* ---------- review UI ---------- */
+function render(){
+  if(!S.photos.length)return;
+  const A=S.analysis=analyze();
+  const read=S.photos.filter(p=>p.status==='ok'||p.status==='unclear').length;
+  const unclear=S.photos.filter(p=>p.status==='unclear'||p.status==='failed'||p.status==='pending'||(!p.box||!p.wl)&&p.status!=='ok').length;
+  const complete=A.boxes.filter(b=>b.exp!==null&&b.found>=b.exp&&!/unpaired/.test(b.note)).length;
+  $('#s3').hidden=false;$('#s4').hidden=false;
+  $('#tiles').innerHTML=`<div class="tile"><b>${read}</b><span>photos read of ${S.photos.length}</span></div><div class="tile ok"><b>${A.slides.filter(s=>s.a&&s.b).length}</b><span>port pairs (slides)</span></div><div class="tile ${complete===S.order.length?'ok':'warn'}"><b>${complete}/${S.order.length}</b><span>boxes complete</span></div><div class="tile ${unclear?'bad':'ok'}"><b>${unclear}</b><span>photos to check</span></div>`;
+  $('#issues').innerHTML=A.issues.length?`<div class="tablewrap"><table><thead><tr><th>Box</th><th class="num">Units</th><th>Issue</th></tr></thead><tbody>${A.issues.map(i=>{const b=A.boxes.find(x=>x.k===i.k);return `<tr><td>${esc(i.k)}</td><td class="num">${b?.exp??'–'}</td><td><span class="pill ${i.kind}">${i.kind==='bad'?'Missing':'Check'}</span> ${esc(i.text)}</td></tr>`}).join('')}</tbody></table></div>`:'<div class="msg ok">Every box in your list has the expected pairs.</div>';
+  $('#sM').hidden=false;
+  $('#missing').innerHTML=A.missing.length?`<div class="tablewrap"><table><thead><tr><th>Box</th><th>Port</th><th>Photo needed</th><th>Already have</th></tr></thead><tbody>${A.missing.map(m=>`<tr><td>${esc(m.k)}</td><td>${esc(m.label)}</td><td><span class="pill bad">${esc(m.need)}</span></td><td>${esc(m.have||'–')}</td></tr>`).join('')}</tbody></table></div>`:'<div class="msg ok">No missing pictures: every box in your list has all its port pairs.</div>';
+  $('#copyMiss').hidden=!A.missing.length;
+  renderPhotos();
+  $('#dlNote').textContent=`${A.slides.length} slides`;
+}
+$('#copyMiss').onclick=async()=>{
+  const A=S.analysis;if(!A)return;
+  const t=['Missing pictures'].concat(A.missing.map(m=>`${m.label}: ${m.need}${m.have?` (have ${m.have})`:''}`)).join('\n');
+  try{await navigator.clipboard.writeText(t);$('#copyNote').textContent='Copied.'}catch(e){$('#copyNote').textContent='Copy was blocked here; select the table text instead.'}
+};
+function badge(p){
+  if(p.status==='failed'||p.status==='pending')return '<span class="pill bad">Not read</span>';
+  if(p.edited)return '<span class="pill ok">Edited</span>';
+  if(p.spMismatch)return `<span class="pill warn">Label ${esc(p.spRaw)} fits ${esc(p.spBox||'another box')}</span>`;
+  if(p.inferred)return '<span class="pill warn">Box inferred from label</span>';
+  if(p.status==='unclear')return '<span class="pill warn">Unclear</span>';
+  if(p.box&&!S.boxes.has(p.box))return '<span class="pill warn">Not in list</span>';
+  return '<span class="pill ok">Read</span>';
+}
+function renderPhotos(){
+  const A=S.analysis;
+  const flagged=p=>(p.status!=='ok'&&!p.edited)||!p.box||!p.wl||!S.boxes.has(p.box)||(p.spMismatch&&!p.edited);
+  const show=$('#showAll').checked?S.photos:S.photos.filter(p=>flagged(p)||(A.boxes.find(b=>b.k===p.box)?.note||'').includes(p.name));
+  const tb=$('#ptable tbody');tb.innerHTML='';
+  if(!show.length){tb.innerHTML='<tr><td colspan="6" class="muted">No photos need checking.</td></tr>';return}
+  for(const p of show.slice(0,400)){
+    const tr=document.createElement('tr');tr.dataset.id=p.id;
+    tr.innerHTML=`<td>${p.thumb?`<img src="${p.thumb}" alt="${esc(p.name)}" data-zoom="1">`:''}</td><td class="small">${esc(p.name)}</td>
+    <td><input type="text" list="boxlist" value="${esc(p.box||'')}" data-f="box" size="9" aria-label="Box for ${esc(p.name)}"></td>
+    <td><select data-f="wl" aria-label="Wavelength for ${esc(p.name)}"><option value=""></option><option value="1310"${p.wl===1310?' selected':''}>1310</option><option value="1550"${p.wl===1550?' selected':''}>1550</option></select></td>
+    <td class="num"><input type="number" step="0.01" value="${p.dbm??''}" data-f="dbm" style="width:84px" aria-label="dBm for ${esc(p.name)}"></td><td>${badge(p)}</td>`;
+    tb.appendChild(tr);
+  }
+}
+$('#showAll').onchange=renderPhotos;
+let tmr;
+$('#ptable').addEventListener('change',e=>{
+  const f=e.target.dataset.f;if(!f)return;const p=S.photos[+e.target.closest('tr').dataset.id];
+  if(f==='box')p.box=parseBox(e.target.value);
+  if(f==='wl')p.wl=e.target.value?+e.target.value:null;
+  if(f==='dbm')p.dbm=e.target.value===''?null:+e.target.value;
+  p.edited=true;p.status='ok';clearTimeout(tmr);tmr=setTimeout(render,250);
+});
+$('#ptable').addEventListener('click',async e=>{
+  if(!e.target.dataset.zoom)return;const p=S.photos[+e.target.closest('tr').dataset.id];
+  $('#lightbox img').src=URL.createObjectURL(p.blob);$('#lightbox').hidden=false;
+});
+$('#lightbox').onclick=()=>{$('#lightbox').hidden=true};
+document.addEventListener('keydown',e=>{if(e.key==='Escape')$('#lightbox').hidden=true});
+
+/* ---------- outputs ---------- */
+function title(){const wo=$('#wo').value.trim()||'',ar=$('#area').value.trim()||$('#area').placeholder.replace(/\s*\(.*\)/,'')||'';return `${wo} ${ar}: Power Meter Pictures`.trim()}
+async function save(name,data,btn){
+  try{await S.dl.save({filename:name,data});$('#dlNote').textContent=`Saved ${name}`}
+  catch(e){$('#dlNote').textContent=e.code==='declined'?'Download cancelled.':'This view cannot save files ('+(e.code||'error')+').'}
+  btn.disabled=false;
+}
+$('#dlP').onclick=async()=>{
+  const btn=$('#dlP');
+  try{await buildPpt(btn)}catch(e){$('#dlNote').textContent='PowerPoint failed: '+(e.message||e)+'. Press the button again.'}
+  finally{btn.disabled=false}
+};
+function loadScript(u){return new Promise((res,rej)=>{const e=document.createElement('script');e.src=u;e.onload=res;e.onerror=()=>rej(new Error('could not load '+u));document.head.appendChild(e)})}
+async function need(name,urls){
+  for(const u of urls){if(typeof window[name]!=='undefined')return;try{await loadScript(u)}catch(e){}}
+  if(typeof window[name]==='undefined')throw new Error(name+' library could not be loaded. Check your connection and try again.');
+}
+async function buildPpt(btn){
+  btn.disabled=true;
+  await need('PptxGenJS',['https://cdnjs.cloudflare.com/ajax/libs/pptxgenjs/3.12.0/pptxgen.bundle.js','https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js','https://unpkg.com/pptxgenjs@3.12.0/dist/pptxgen.bundle.js']);
+  const A=S.analysis;
+  const pres=new PptxGenJS();pres.layout='LAYOUT_WIDE';
+  const EMU=914400,H=5030000/EMU,top=1371600/EMU,gap=0.45;
+  let n=0;
+  for(const s of A.slides){
+    const sl=pres.addSlide();
+    sl.addText(title(),{x:-90360/EMU,y:0,w:12281040/EMU,h:730800/EMU,fill:{color:'7030A0'},color:'FFFFFF',fontSize:40,fontFace:'Aptos Display',valign:'bottom',align:'left',margin:[0,7,3,7],isTextBox:true});
+    sl.addText(s.label,{shape:pres.shapes.ROUNDED_RECTANGLE,rectRadius:0.09,x:3051000/EMU,y:811800/EMU,w:3899160/EMU,h:502920/EMU,fill:{color:'7030A0'},line:{color:'092A38',width:1},color:'FFFFFF',bold:true,fontSize:24,fontFace:'Aptos',align:'center',valign:'middle'});
+    sl.addImage({data:LOGO,x:11261880/EMU,y:0,w:928800/EMU,h:730800/EMU});
+    const imgs=[];
+    for(const p of [s.a,s.b]){
+      if(!p){imgs.push(null);continue}
+      const bmp=await createImageBitmap(p.blob,{imageOrientation:'from-image'});
+      const sc=Math.min(1,960/Math.max(bmp.width,bmp.height));const c=document.createElement('canvas');c.width=Math.round(bmp.width*sc);c.height=Math.round(bmp.height*sc);
+      c.getContext('2d').drawImage(bmp,0,0,c.width,c.height);bmp.close?.();
+      imgs.push({d:c.toDataURL('image/jpeg',.72),w:H*c.width/c.height});
+    }
+    const widths=imgs.map(i=>i?i.w:H*0.75),total=widths[0]+widths[1]+gap;let x=(13.333-total)/2;
+    imgs.forEach((im,i)=>{
+      if(im)sl.addImage({data:im.d,x,y:top,w:im.w,h:H});
+      else sl.addText('PHOTO MISSING',{x,y:top,w:widths[i],h:H,align:'center',valign:'middle',fontSize:24,color:'C00000',line:{color:'C00000',width:1.5},isTextBox:true});
+      x+=widths[i]+gap;
+    });
+    if(++n%10===0){$('#dlNote').textContent=`Building slide ${n} of ${A.slides.length}… (the button is greyed out until it finishes)`;await new Promise(r=>setTimeout(r))}
+  }
+  $('#dlNote').textContent='Packing file…';
+  const blob=await pres.write({outputType:'blob'});
+  await save(`${($('#wo').value.trim()||'report')}_Power_Meter_Pictures.pptx`,blob,btn);}
+$('#dlX').onclick=async()=>{
+  const btn=$('#dlX');
+  try{await buildXlsx(btn)}catch(e){$('#dlNote').textContent='Excel failed: '+(e.message||e)}
+  finally{btn.disabled=false}
+};
+async function buildXlsx(btn){
+  btn.disabled=true;
+  await need('XLSX',['https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js','https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js']);const A=S.analysis,wb=XLSX.utils.book_new();
+  const s1=[['Slide','Label','Box','Port','1310 file','1310 dBm','1550 file','1550 dBm']];
+  A.slides.forEach((s,i)=>s1.push([i+1,s.label,s.k,'P'+s.port,s.a?.name||'',s.a?.dbm??'',s.b?.name||'',s.b?.dbm??'']));
+  const s2=[['Box','Units (Excel)','Pairs found','Notes']];A.boxes.forEach(b=>s2.push([b.k,b.exp??'',b.found,b.note]));
+  const s3=[['File','Box','Wavelength','dBm','Label SP/PORT','Status']];S.photos.forEach(p=>s3.push([p.name,p.box||'',p.wl||'',p.dbm??'',p.spRaw||'',p.edited?'edited':p.status]));
+  const s4=[['Box','Port','Photo needed','Already have']];A.missing.forEach(m=>s4.push([m.k,m.label,m.need,m.have]));
+  [['Slides',s1],['Box check',s2],['Missing pictures',s4],['All photos',s3]].forEach(([n,rows])=>{const ws=XLSX.utils.aoa_to_sheet(rows);ws['!cols']=rows[0].map(()=>({wch:18}));XLSX.utils.book_append_sheet(wb,ws,n)});
+  const out=XLSX.write(wb,{bookType:'xlsx',type:'array'});
+  await save(`${($('#wo').value.trim()||'report')}_readings.xlsx`,new Blob([out]),btn);
+}
+
+/* ---------- start ---------- */
+(async()=>{
+  S.sample=await window.claude?.use('sample').catch?.(()=>null)??null;
+  S.dl=await window.claude?.use('downloads').catch?.(()=>null)??null;
+  if(S.sample){S.limits=await S.sample.limits().catch(()=>null)}
+  if(!S.sample||!S.limits?.images)note($('#s1msg'),'warn','Reading photos needs Claude with image support, which is not available in this view. Open the page inside Claude to use it.');
+  if(!S.dl)$('#dlNote').textContent='Saving files is not available in this view.';
+  ready();
+})();
+</script>
